@@ -5,12 +5,18 @@
                 "data": {
                     "api_key": "Govee API Key"
                 },
-                "description": "Enter your Govee API Key. You can get this from the Govee Developer Portal.",
+                "description": "Enter your Govee API Key. You can get this from the Govee Developer Portal (https://developer.govee.com).",
                 "title": "Govee"
             }
         },
         "error": {
-            "cannot_connect": "Failed to connect to Govee API. Please check your API key."
+            "cannot_connect": "Failed to connect to Govee API",
+            "invalid_api_key": "Invalid API key",
+            "rate_limit": "API rate limit exceeded, please try again later",
+            "timeout": "Connection timed out",
+            "api_error": "API error occurred",
+            "invalid_response": "Invalid response from Govee API",
+            "unknown": "Unknown error occurred. Please check Home Assistant logs."
         },
         "abort": {
             "already_configured": "Govee integration is already configured"
