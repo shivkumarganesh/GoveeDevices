@@ -64,24 +64,25 @@ async def async_setup_entry(
     # Create light entities for each device
     lights = []
     for device in devices:
-        lights.append(GoveeLight(device, api_key))
+        lights.append(GoveeLight(hass, entry, device))
 
     async_add_entities(lights)
 
 class GoveeLight(LightEntity):
     """Representation of a Govee Light."""
 
-    def __init__(self, device: dict, api_key: str) -> None:
+    def __init__(self, hass, config_entry, device_info):
         """Initialize the light."""
-        self._device = device
-        self._api_key = api_key
-        self._attr_unique_id = device["device"]
-        self._attr_name = device["deviceName"]
-        self._attr_supported_color_modes = {ColorMode.RGB}
-        self._attr_color_mode = ColorMode.RGB
+        self.hass = hass
+        self._entry_id = config_entry.entry_id  # Add this line
+        self._device_info = device_info
+        self._name = device_info["deviceName"]
+        self._device_id = device_info["device"]
+        self._model = device_info["model"]
         self._state = None
         self._brightness = None
-        self._rgb_color = None
+        self._color = None
+        self._available = True
 
     @property
     def is_on(self) -> bool | None:
@@ -96,7 +97,7 @@ class GoveeLight(LightEntity):
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
         """Return the rgb color value [int, int, int]."""
-        return self._rgb_color
+        return self._color
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
@@ -155,53 +156,31 @@ class GoveeLight(LightEntity):
 
     async def async_update(self) -> None:
         """Fetch new state data for this light."""
-        rate_limiter = self.hass.data[DOMAIN][self._entry_id]["rate_limiter"]
-        
-        if not await rate_limiter.can_make_request():
-            _LOGGER.warning("Rate limit reached, skipping update for device %s", self._attr_name)
-            return
-
-        session = async_get_clientsession(self.hass)
-        headers = {"Govee-API-Key": self._api_key}
-        url = f"https://developer-api.govee.com/v1/devices/state"
-        params = {
-            "device": self._device["device"],
-            "model": self._device["model"]
-        }
-
         try:
-            async with session.get(url, headers=headers, params=params) as response:
-                response.raise_for_status()
-                
-                # Update rate limiter with API response headers
-                remaining = response.headers.get("Rate-Limit-Remaining")
-                reset_time = response.headers.get("Rate-Limit-Reset")
-                if remaining and reset_time:
-                    rate_limiter.update_api_limits(
-                        int(remaining),
-                        datetime.fromtimestamp(int(reset_time))
-                    )
-                
-                await rate_limiter.increment_call_count()
-                
-                data = await response.json()
-                
-                for prop in data.get("data", {}).get("properties", []):
-                    if prop["name"] == "powerState":
-                        self._state = prop["value"] == "on"
-                    elif prop["name"] == "brightness":
-                        self._brightness = int(prop["value"] * 255 / 100)
-                    elif prop["name"] == "color":
-                        self._rgb_color = (
-                            prop["value"]["r"],
-                            prop["value"]["g"],
-                            prop["value"]["b"]
-                        )
-                        
-                # Update polling interval based on current usage
-                scan_interval = rate_limiter.polling_interval
-                if scan_interval != self._attr_scan_interval:
-                    self._attr_scan_interval = scan_interval
-                    
-        except Exception as err:
-            _LOGGER.error("Error updating Govee light state: %s", err)
+            rate_limiter = self.hass.data[DOMAIN][self._entry_id]["rate_limiter"]
+            api = self.hass.data[DOMAIN][self._entry_id]["api"]
+            
+            if not rate_limiter.can_make_request():
+                _LOGGER.warning("Rate limit reached, skipping update for %s", self._name)
+                return
+
+            response = await self.hass.async_add_executor_job(
+                api.get_device_state,
+                self._device_id,
+                self._model
+            )
+
+            if response and "data" in response:
+                data = response["data"]
+                self._state = data.get("powerState") == "on"
+                self._brightness = int(data.get("brightness", 0) * 255 / 100)
+                color = data.get("color", {})
+                if color:
+                    self._color = (color.get("r", 0), color.get("g", 0), color.get("b", 0))
+                self._available = True
+            else:
+                self._available = False
+
+        except Exception as e:
+            _LOGGER.error("Error updating Govee light %s: %s", self._name, str(e))
+            self._available = False
