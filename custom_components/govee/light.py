@@ -28,8 +28,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up Govee light devices."""
     api_key = entry.data[CONF_API_KEY]
+    rate_limiter = hass.data[DOMAIN][entry.entry_id]["rate_limiter"]
     session = async_get_clientsession(hass)
     
+    if not await rate_limiter.can_make_request():
+        _LOGGER.warning("Rate limit reached, delaying device setup")
+        return
+
     # Get the list of devices from Govee API
     headers = {"Govee-API-Key": api_key}
     async with session.get(
@@ -38,8 +43,23 @@ async def async_setup_entry(
         timeout=aiohttp.ClientTimeout(total=10)
     ) as response:
         response.raise_for_status()
+        
+        # Update rate limiter with API response headers
+        remaining = response.headers.get("Rate-Limit-Remaining")
+        reset_time = response.headers.get("Rate-Limit-Reset")
+        if remaining and reset_time:
+            rate_limiter.update_api_limits(
+                int(remaining),
+                datetime.fromtimestamp(int(reset_time))
+            )
+        
+        await rate_limiter.increment_call_count()
+        
         data = await response.json()
         devices = data.get("data", {}).get("devices", [])
+        
+        # Update device count in rate limiter
+        await rate_limiter.update_device_count(len(devices))
 
     # Create light entities for each device
     lights = []
@@ -135,6 +155,12 @@ class GoveeLight(LightEntity):
 
     async def async_update(self) -> None:
         """Fetch new state data for this light."""
+        rate_limiter = self.hass.data[DOMAIN][self._entry_id]["rate_limiter"]
+        
+        if not await rate_limiter.can_make_request():
+            _LOGGER.warning("Rate limit reached, skipping update for device %s", self._attr_name)
+            return
+
         session = async_get_clientsession(self.hass)
         headers = {"Govee-API-Key": self._api_key}
         url = f"https://developer-api.govee.com/v1/devices/state"
@@ -146,6 +172,18 @@ class GoveeLight(LightEntity):
         try:
             async with session.get(url, headers=headers, params=params) as response:
                 response.raise_for_status()
+                
+                # Update rate limiter with API response headers
+                remaining = response.headers.get("Rate-Limit-Remaining")
+                reset_time = response.headers.get("Rate-Limit-Reset")
+                if remaining and reset_time:
+                    rate_limiter.update_api_limits(
+                        int(remaining),
+                        datetime.fromtimestamp(int(reset_time))
+                    )
+                
+                await rate_limiter.increment_call_count()
+                
                 data = await response.json()
                 
                 for prop in data.get("data", {}).get("properties", []):
@@ -159,5 +197,11 @@ class GoveeLight(LightEntity):
                             prop["value"]["g"],
                             prop["value"]["b"]
                         )
+                        
+                # Update polling interval based on current usage
+                scan_interval = rate_limiter.polling_interval
+                if scan_interval != self._attr_scan_interval:
+                    self._attr_scan_interval = scan_interval
+                    
         except Exception as err:
             _LOGGER.error("Error updating Govee light state: %s", err)
