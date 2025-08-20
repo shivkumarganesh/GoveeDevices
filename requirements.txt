@@ -3,11 +3,11 @@ homeassistant>=2023.8.0
 aiohttp>=3.8.0
 voluptuous>=0.13.1
 
-# AWS IoT requirements
-awscrt>=0.16.0
-awsiotsdk>=1.14.0
-setuptools>=81.0.0  # Latest version that doesn't use pkg_resources
+# Required for API functionality
+importlib-metadata>=6.0.0
+
+# Pin setuptools to a compatible version
+setuptools<81.0.0
 
 # Optional requirements for advanced features
 appdirs>=1.4.4
-importlib-metadata>=6.0.0
