@@ -1,0 +1,19 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "api_key": "Govee API Key"
+                },
+                "description": "Enter your Govee API Key. You can get this from the Govee Developer Portal.",
+                "title": "Govee"
+            }
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to Govee API. Please check your API key."
+        },
+        "abort": {
+            "already_configured": "Govee integration is already configured"
+        }
+    }
+}
