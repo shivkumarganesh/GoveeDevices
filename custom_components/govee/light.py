@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import requests
+import aiohttp
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_RGB_COLOR,
@@ -14,6 +14,7 @@ from homeassistant.components.light import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN
@@ -27,15 +28,18 @@ async def async_setup_entry(
 ) -> None:
     """Set up Govee light devices."""
     api_key = entry.data[CONF_API_KEY]
+    session = async_get_clientsession(hass)
     
     # Get the list of devices from Govee API
     headers = {"Govee-API-Key": api_key}
-    response = requests.get(
+    async with session.get(
         "https://developer-api.govee.com/v1/devices",
-        headers=headers
-    )
-    response.raise_for_status()
-    devices = response.json().get("data", {}).get("devices", [])
+        headers=headers,
+        timeout=aiohttp.ClientTimeout(total=10)
+    ) as response:
+        response.raise_for_status()
+        data = await response.json()
+        devices = data.get("data", {}).get("devices", [])
 
     # Create light entities for each device
     lights = []
@@ -74,8 +78,9 @@ class GoveeLight(LightEntity):
         """Return the rgb color value [int, int, int]."""
         return self._rgb_color
 
-    def turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
+        session = async_get_clientsession(self.hass)
         headers = {"Govee-API-Key": self._api_key}
         url = "https://developer-api.govee.com/v1/devices/control"
         
@@ -105,12 +110,13 @@ class GoveeLight(LightEntity):
                 }
             }
 
-        response = requests.put(url, headers=headers, json=command)
-        response.raise_for_status()
-        self._state = True
+        async with session.put(url, headers=headers, json=command) as response:
+            response.raise_for_status()
+            self._state = True
 
-    def turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the light."""
+        session = async_get_clientsession(self.hass)
         headers = {"Govee-API-Key": self._api_key}
         url = "https://developer-api.govee.com/v1/devices/control"
         
@@ -123,12 +129,13 @@ class GoveeLight(LightEntity):
             }
         }
 
-        response = requests.put(url, headers=headers, json=command)
-        response.raise_for_status()
-        self._state = False
+        async with session.put(url, headers=headers, json=command) as response:
+            response.raise_for_status()
+            self._state = False
 
-    def update(self) -> None:
+    async def async_update(self) -> None:
         """Fetch new state data for this light."""
+        session = async_get_clientsession(self.hass)
         headers = {"Govee-API-Key": self._api_key}
         url = f"https://developer-api.govee.com/v1/devices/state"
         params = {
@@ -137,20 +144,20 @@ class GoveeLight(LightEntity):
         }
 
         try:
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json()
-            
-            for prop in data.get("data", {}).get("properties", []):
-                if prop["name"] == "powerState":
-                    self._state = prop["value"] == "on"
-                elif prop["name"] == "brightness":
-                    self._brightness = int(prop["value"] * 255 / 100)
-                elif prop["name"] == "color":
-                    self._rgb_color = (
-                        prop["value"]["r"],
-                        prop["value"]["g"],
-                        prop["value"]["b"]
-                    )
+            async with session.get(url, headers=headers, params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
+                
+                for prop in data.get("data", {}).get("properties", []):
+                    if prop["name"] == "powerState":
+                        self._state = prop["value"] == "on"
+                    elif prop["name"] == "brightness":
+                        self._brightness = int(prop["value"] * 255 / 100)
+                    elif prop["name"] == "color":
+                        self._rgb_color = (
+                            prop["value"]["r"],
+                            prop["value"]["g"],
+                            prop["value"]["b"]
+                        )
         except Exception as err:
             _LOGGER.error("Error updating Govee light state: %s", err)
