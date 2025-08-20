@@ -1,14 +1,34 @@
 """The Govee integration."""
 from __future__ import annotations
 
+import os
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
 from .rate_limiter import GoveeRateLimiter
 
+_LOGGER = logging.getLogger(__name__)
+
 DOMAIN = "govee"
 PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.SENSOR]
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Govee integration."""
+    # Register custom card
+    card_dir = os.path.join(os.path.dirname(__file__), "www")
+    if os.path.isdir(card_dir):
+        hass.http.register_static_path(
+            f"/govee-api-monitor-card.js",
+            os.path.join(card_dir, "govee-api-monitor-card.js"),
+            cache_headers=False,
+        )
+        _LOGGER.info("Registered Govee API Monitor card")
+        
+    return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Govee from a config entry."""
