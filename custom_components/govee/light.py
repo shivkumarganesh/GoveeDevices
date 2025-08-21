@@ -9,11 +9,17 @@ import aiohttp
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_RGB_COLOR,
+    ATTR_COLOR_TEMP,
+    ATTR_COLOR_TEMP_KELVIN,
     ColorMode,
     LightEntity,
     LightEntityFeature,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.util.color import (
+    color_temperature_kelvin_to_mired,
+    color_temperature_mired_to_kelvin,
+)
 from homeassistant.const import CONF_API_KEY
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -86,8 +92,13 @@ class GoveeLight(LightEntity):
         self._state = None
         self._brightness = None
         self._color = None
+        self._color_temp = None
         self._available = True
         self._attr_should_poll = True
+        
+        # Define color temperature range (in Kelvin)
+        self._attr_min_color_temp_kelvin = 2000  # Warm white
+        self._attr_max_color_temp_kelvin = 9000  # Cool white
         
         # Set supported features based on device capabilities
         self._attr_supported_color_modes = set()
@@ -97,6 +108,8 @@ class GoveeLight(LightEntity):
         if isinstance(commands, list):
             if "color" in commands:
                 self._attr_supported_color_modes.add(ColorMode.RGB)
+            if "colorTem" in commands:
+                self._attr_supported_color_modes.add(ColorMode.COLOR_TEMP)
             if "brightness" in commands:
                 if not self._attr_supported_color_modes:
                     self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
@@ -134,7 +147,12 @@ class GoveeLight(LightEntity):
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
         """Return the rgb color value [int, int, int]."""
-        return self._color
+        return self._color if ColorMode.RGB in self._attr_supported_color_modes else None
+
+    @property
+    def color_temp_kelvin(self) -> int | None:
+        """Return the color temperature in Kelvin."""
+        return self._color_temp if ColorMode.COLOR_TEMP in self._attr_supported_color_modes else None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
