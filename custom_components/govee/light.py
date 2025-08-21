@@ -87,31 +87,34 @@ class GoveeLight(LightEntity):
         self._brightness = None
         self._color = None
         self._available = True
+        self._attr_should_poll = True
         
         # Set supported features based on device capabilities
         self._attr_supported_color_modes = set()
         
         # Get device capabilities from supportCmds if available
-        if "supportCmds" in device_info:
-            commands = device_info["supportCmds"]
-            if isinstance(commands, list):
-                if "color" in commands:
-                    self._attr_supported_color_modes.add(ColorMode.RGB)
-                if "brightness" in commands:
-                    if ColorMode.RGB not in self._attr_supported_color_modes:
-                        self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
+        commands = device_info.get("supportCmds", [])
+        if isinstance(commands, list):
+            if "color" in commands:
+                self._attr_supported_color_modes.add(ColorMode.RGB)
+            if "brightness" in commands:
+                if not self._attr_supported_color_modes:
+                    self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
             
         # If no specific modes are supported, default to ON/OFF
         if not self._attr_supported_color_modes:
             self._attr_supported_color_modes = {ColorMode.ONOFF}
+            self._attr_color_mode = ColorMode.ONOFF
+        else:
+            # Set the current color mode based on capabilities
+            self._attr_color_mode = (
+                ColorMode.RGB if ColorMode.RGB in self._attr_supported_color_modes
+                else ColorMode.BRIGHTNESS if ColorMode.BRIGHTNESS in self._attr_supported_color_modes
+                else ColorMode.ONOFF
+            )
         
-        # Set the current color mode
-        self._attr_color_mode = ColorMode.RGB if ColorMode.RGB in self._attr_supported_color_modes else \
-                               ColorMode.BRIGHTNESS if ColorMode.BRIGHTNESS in self._attr_supported_color_modes else \
-                               ColorMode.ONOFF
-        
-        # Initialize features
-        self._attr_supported_features = 0
+        # Initialize features - using proper color modes instead of deprecated features
+        self._attr_supported_features = 0  # No additional features beyond color modes
 
     @property
     def available(self) -> bool:
