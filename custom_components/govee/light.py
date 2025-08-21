@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from typing import Any
 from datetime import datetime
 
@@ -38,43 +39,70 @@ async def async_setup_entry(
     api_key = entry.data[CONF_API_KEY]
     rate_limiter = hass.data[DOMAIN][entry.entry_id]["rate_limiter"]
     session = async_get_clientsession(hass)
-    
-    if not await rate_limiter.can_make_request():
-        _LOGGER.warning("Rate limit reached, delaying device setup")
-        return
 
-    # Get the list of devices from Govee API
-    headers = {"Govee-API-Key": api_key}
-    async with session.get(
-        "https://developer-api.govee.com/v1/devices",
-        headers=headers,
-        timeout=aiohttp.ClientTimeout(total=10)
-    ) as response:
-        response.raise_for_status()
-        
-        # Update rate limiter with API response headers
-        remaining = response.headers.get("Rate-Limit-Remaining")
-        reset_time = response.headers.get("Rate-Limit-Reset")
-        if remaining and reset_time:
-            rate_limiter.update_api_limits(
-                int(remaining),
-                datetime.fromtimestamp(int(reset_time))
-            )
-        
-        await rate_limiter.increment_call_count()
-        
-        data = await response.json()
-        devices = data.get("data", {}).get("devices", [])
-        
-        # Update device count in rate limiter
-        await rate_limiter.update_device_count(len(devices))
+    try:
+        # Get the list of devices from Govee API
+        headers = {"Govee-API-Key": api_key}
+        async with session.get(
+            "https://developer-api.govee.com/v1/devices",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=10)
+        ) as response:
+            if response.status == 429:  # Rate limit reached
+                _LOGGER.warning("Rate limit reached during device setup, will retry later")
+                return
 
-    # Create light entities for each device
-    lights = []
-    for device in devices:
-        lights.append(GoveeLight(hass, entry, device))
+            response.raise_for_status()
+            
+            # Update rate limiter with API response headers
+            remaining = response.headers.get("Rate-Limit-Remaining")
+            reset_time = response.headers.get("Rate-Limit-Reset")
+            if remaining and reset_time:
+                try:
+                    rate_limiter.update_api_limits(
+                        int(remaining),
+                        datetime.fromtimestamp(int(reset_time))
+                    )
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning("Error updating rate limits: %s", str(e))
+            
+            await rate_limiter.increment_call_count()
+            
+            data = await response.json()
+            if not isinstance(data, dict) or "data" not in data or "devices" not in data["data"]:
+                _LOGGER.error("Invalid response from Govee API: %s", data)
+                return
+                
+            devices = data["data"]["devices"]
+            if not devices:
+                _LOGGER.warning("No devices found in Govee API response")
+                return
 
-    async_add_entities(lights)
+            # Update device count in rate limiter
+            await rate_limiter.update_device_count(len(devices))
+            _LOGGER.info("Found %d Govee devices", len(devices))
+
+            # Create light entities for each device
+            lights = []
+            for device in devices:
+                if not all(k in device for k in ["device", "model", "deviceName"]):
+                    _LOGGER.warning("Invalid device info received: %s", device)
+                    continue
+                    
+                light = GoveeLight(hass, entry, device)
+                lights.append(light)
+                _LOGGER.info("Added Govee light: %s", device["deviceName"])
+
+            if lights:
+                async_add_entities(lights)
+                _LOGGER.info("Successfully added %d Govee lights", len(lights))
+            else:
+                _LOGGER.warning("No valid Govee lights found to add")
+
+    except aiohttp.ClientError as err:
+        _LOGGER.error("Error getting devices from Govee API: %s", str(err))
+    except Exception as err:
+        _LOGGER.error("Unexpected error setting up Govee lights: %s", str(err))
 
 class GoveeLight(LightEntity):
     """Representation of a Govee Light."""
@@ -197,6 +225,14 @@ class GoveeLight(LightEntity):
                 }
             }
 
+        if ATTR_COLOR_TEMP_KELVIN in kwargs:
+            temp_kelvin = kwargs[ATTR_COLOR_TEMP_KELVIN]
+            if self._attr_min_color_temp_kelvin <= temp_kelvin <= self._attr_max_color_temp_kelvin:
+                command["cmd"] = {
+                    "name": "colorTemp",
+                    "value": temp_kelvin
+                }
+
         try:
             async with session.put(url, headers=headers, json=command) as response:
                 response.raise_for_status()
@@ -205,6 +241,8 @@ class GoveeLight(LightEntity):
                     self._brightness = kwargs[ATTR_BRIGHTNESS]
                 if ATTR_RGB_COLOR in kwargs:
                     self._color = kwargs[ATTR_RGB_COLOR]
+                if ATTR_COLOR_TEMP_KELVIN in kwargs:
+                    self._color_temp = kwargs[ATTR_COLOR_TEMP_KELVIN]
         except Exception as e:
             _LOGGER.error("Error turning on Govee light %s: %s", self._attr_name, str(e))
             self._available = False

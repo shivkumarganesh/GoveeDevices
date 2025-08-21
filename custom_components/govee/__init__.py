@@ -22,10 +22,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     card_dir = os.path.join(os.path.dirname(__file__), "www")
     if os.path.isdir(card_dir):
         try:
-            await hass.http.async_register_static_path(
+            hass.http.register_static_path(
                 "/local/govee-api-monitor-card",
-                os.path.join(card_dir, "govee-api-monitor-card.js"),
-                cache_headers=False
+                os.path.join(card_dir, "govee-api-monitor-card.js")
             )
             _LOGGER.info("Registered Govee API Monitor card")
         except Exception as ex:

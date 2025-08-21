@@ -101,28 +101,31 @@ class GoveeRateLimiter:
                 self._current_polling_interval = self.calculate_polling_interval()
 
     async def can_make_request(self) -> bool:
-        """Check if we can make a new API request."""
-        async with self._lock:
-            # If we have API remaining calls info, use it
-            if self._api_remaining_calls is not None:
-                if self._api_remaining_calls <= RATE_LIMIT_BUFFER:
-                    return False
-
-            # Check our local tracking
-            now = dt_util.now()
-            if now.date() > self._last_reset.date():
-                self._total_calls = 0
-                self._last_reset = now
-                return True
-
-            # Use projected daily calls to determine if we can make a request
-            time_elapsed = (now - self._last_reset).total_seconds()
-            if time_elapsed > 0:
-                current_rate = self._total_calls / time_elapsed
-                projected_daily_calls = current_rate * 24 * 60 * 60
-                return projected_daily_calls < SAFE_LIMIT
-
-            return self._total_calls < SAFE_LIMIT
+        """Check if we can make a request."""
+        now = datetime.now()
+        
+        # Always allow the initial request (when last_call_time is None)
+        if self.last_call_time is None:
+            return True
+            
+        # Wait for rate limit reset if we've hit the limit
+        if (
+            self.api_call_count >= self.api_call_limit
+            and self.rate_limit_reset is not None
+            and now < self.rate_limit_reset
+        ):
+            _LOGGER.debug("Rate limit reached. Reset time: %s", self.rate_limit_reset)
+            return False
+            
+        # If we're within our minimum delay period, wait
+        if self.last_call_time is not None:
+            time_since_last_call = (now - self.last_call_time).total_seconds()
+            if time_since_last_call < self.min_time_between_calls:
+                _LOGGER.debug("Too soon since last call. Need to wait %s more seconds", 
+                    self.min_time_between_calls - time_since_last_call)
+                return False
+                
+        return True
 
     @property
     def polling_interval(self) -> int:
