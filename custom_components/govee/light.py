@@ -89,9 +89,21 @@ class GoveeLight(LightEntity):
         self._available = True
         
         # Set supported features
-        self._attr_supported_color_modes = {ColorMode.RGB, ColorMode.BRIGHTNESS}
-        self._attr_color_mode = ColorMode.RGB
-        self._attr_supported_features = LightEntityFeature.EFFECT
+        self._attr_supported_color_modes = set()
+        if "properties" in device_info:
+            supports_rgb = any(prop.get("name") == "color" for prop in device_info["properties"])
+            supports_brightness = any(prop.get("name") == "brightness" for prop in device_info["properties"])
+            
+            if supports_rgb:
+                self._attr_supported_color_modes.add(ColorMode.RGB)
+            if supports_brightness and not supports_rgb:
+                self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
+            
+        if not self._attr_supported_color_modes:
+            self._attr_supported_color_modes = {ColorMode.ONOFF}
+            
+        self._attr_color_mode = next(iter(self._attr_supported_color_modes))
+        self._attr_supported_features = 0  # Remove EFFECT as it's not implemented yet
 
     @property
     def available(self) -> bool:
@@ -191,16 +203,31 @@ class GoveeLight(LightEntity):
                 response.raise_for_status()
                 data = await response.json()
 
-                if "data" in data:
+                if "data" in data and "properties" in data["data"]:
                     properties = data["data"]["properties"]
                     for prop in properties:
-                        if prop["name"] == "powerState":
-                            self._state = prop["value"] == "on"
-                        elif prop["name"] == "brightness":
-                            self._brightness = int(prop["value"] * 255 / 100)
-                        elif prop["name"] == "color":
-                            color = prop["value"]
-                            self._color = (color["r"], color["g"], color["b"])
+                        if not isinstance(prop, dict) or "name" not in prop:
+                            continue
+                            
+                        prop_name = prop.get("name", "")
+                        prop_value = prop.get("value")
+                        
+                        if prop_name == "powerState":
+                            self._state = prop_value == "on"
+                        elif prop_name == "brightness" and prop_value is not None:
+                            try:
+                                self._brightness = int(float(prop_value) * 255 / 100)
+                            except (ValueError, TypeError):
+                                _LOGGER.warning("Invalid brightness value received: %s", prop_value)
+                        elif prop_name == "color" and isinstance(prop_value, dict):
+                            try:
+                                self._color = (
+                                    prop_value.get("r", 0),
+                                    prop_value.get("g", 0),
+                                    prop_value.get("b", 0)
+                                )
+                            except (ValueError, TypeError):
+                                _LOGGER.warning("Invalid color value received: %s", prop_value)
                     self._available = True
                 else:
                     self._available = False

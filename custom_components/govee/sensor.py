@@ -131,6 +131,7 @@ class GoveePollingIntervalSensor(SensorEntity):
 
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = "s"  # seconds
 
     def __init__(self, rate_limiter: GoveeRateLimiter) -> None:
         """Initialize the sensor."""
