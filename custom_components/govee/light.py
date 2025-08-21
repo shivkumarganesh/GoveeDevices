@@ -202,15 +202,41 @@ class GoveeLight(LightEntity):
 
     async def async_update(self) -> None:
         """Fetch new state data for this light."""
+        rate_limiter = self.hass.data[DOMAIN][self._entry_id]["rate_limiter"]
+        
+        if not await rate_limiter.can_make_request():
+            _LOGGER.debug("Rate limit reached for %s, skipping update", self._attr_name)
+            return
+            
         session = async_get_clientsession(self.hass)
         headers = {"Govee-API-Key": self._api_key}
         url = f"https://developer-api.govee.com/v1/devices/state?device={self._device_id}&model={self._model}"
 
         try:
             async with session.get(url, headers=headers) as response:
+                # Update rate limiter with response headers
+                remaining = response.headers.get("Rate-Limit-Remaining")
+                reset_time = response.headers.get("Rate-Limit-Reset")
+                if remaining is not None and reset_time is not None:
+                    rate_limiter.update_api_limits(
+                        int(remaining),
+                        datetime.fromtimestamp(int(reset_time))
+                    )
+                
+                # Handle rate limit response
+                if response.status == 429:
+                    _LOGGER.warning(
+                        "Rate limit reached for %s, next update in %s seconds",
+                        self._attr_name,
+                        reset_time
+                    )
+                    await rate_limiter.increment_call_count()
+                    return
+                
                 response.raise_for_status()
+                await rate_limiter.increment_call_count()
+                
                 data = await response.json()
-
                 if "data" in data and "properties" in data["data"]:
                     properties = data["data"]["properties"]
                     for prop in properties:
@@ -240,6 +266,9 @@ class GoveeLight(LightEntity):
                 else:
                     self._available = False
 
-        except Exception as e:
+        except aiohttp.ClientError as e:
             _LOGGER.error("Error updating Govee light %s: %s", self._attr_name, str(e))
+            self._available = False
+        except Exception as e:
+            _LOGGER.error("Unexpected error updating Govee light %s: %s", self._attr_name, str(e))
             self._available = False
