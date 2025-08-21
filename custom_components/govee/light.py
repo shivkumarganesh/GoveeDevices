@@ -91,9 +91,15 @@ class GoveeLight(LightEntity):
         self._model = device_info["model"]
         self._attr_should_poll = True
         self._attr_assumed_state = False
+        self._last_update = None
+        self._update_lock = asyncio.Lock()
+        self._update_listeners = []
         
         # Set up polling interval (1 minute)
         self._scan_interval = timedelta(minutes=1)
+        
+        # Minimum time between auto updates (2 seconds)
+        self._min_update_interval = timedelta(seconds=2)
         self._state = None
         self._brightness = None
         self._color = None
