@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.components import frontend
 
 from .rate_limiter import GoveeRateLimiter
 
@@ -22,9 +23,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     card_dir = os.path.join(os.path.dirname(__file__), "www")
     if os.path.isdir(card_dir):
         try:
-            hass.http.register_static_path(
-                "/local/govee-api-monitor-card",
-                os.path.join(card_dir, "govee-api-monitor-card.js")
+            # Register static path for custom card
+            hass.components.frontend.async_register_built_in_panel(
+                "lovelace",
+                "custom_card_js",
+                {
+                    "js_url": "/local/govee-api-monitor-card/govee-api-monitor-card.js",
+                    "name": "Govee API Monitor Card"
+                }
             )
             _LOGGER.info("Registered Govee API Monitor card")
         except Exception as ex:

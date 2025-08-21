@@ -4,13 +4,12 @@ from __future__ import annotations
 import logging
 import asyncio
 from typing import Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_RGB_COLOR,
-    ATTR_COLOR_TEMP,
     ATTR_COLOR_TEMP_KELVIN,
     ColorMode,
     LightEntity,
