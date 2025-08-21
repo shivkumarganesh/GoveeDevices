@@ -89,6 +89,11 @@ class GoveeLight(LightEntity):
         self._attr_unique_id = device_info["device"]
         self._device_id = device_info["device"]
         self._model = device_info["model"]
+        self._attr_should_poll = True
+        self._attr_assumed_state = False
+        
+        # Set up polling interval (1 minute)
+        self._scan_interval = timedelta(minutes=1)
         self._state = None
         self._brightness = None
         self._color = None
