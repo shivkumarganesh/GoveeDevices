@@ -88,22 +88,30 @@ class GoveeLight(LightEntity):
         self._color = None
         self._available = True
         
-        # Set supported features
+        # Set supported features based on device capabilities
         self._attr_supported_color_modes = set()
-        if "properties" in device_info:
-            supports_rgb = any(prop.get("name") == "color" for prop in device_info["properties"])
-            supports_brightness = any(prop.get("name") == "brightness" for prop in device_info["properties"])
+        
+        # Get device capabilities from supportCmds if available
+        if "supportCmds" in device_info:
+            commands = device_info["supportCmds"]
+            if isinstance(commands, list):
+                if "color" in commands:
+                    self._attr_supported_color_modes.add(ColorMode.RGB)
+                if "brightness" in commands:
+                    if ColorMode.RGB not in self._attr_supported_color_modes:
+                        self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
             
-            if supports_rgb:
-                self._attr_supported_color_modes.add(ColorMode.RGB)
-            if supports_brightness and not supports_rgb:
-                self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
-            
+        # If no specific modes are supported, default to ON/OFF
         if not self._attr_supported_color_modes:
             self._attr_supported_color_modes = {ColorMode.ONOFF}
-            
-        self._attr_color_mode = next(iter(self._attr_supported_color_modes))
-        self._attr_supported_features = 0  # Remove EFFECT as it's not implemented yet
+        
+        # Set the current color mode
+        self._attr_color_mode = ColorMode.RGB if ColorMode.RGB in self._attr_supported_color_modes else \
+                               ColorMode.BRIGHTNESS if ColorMode.BRIGHTNESS in self._attr_supported_color_modes else \
+                               ColorMode.ONOFF
+        
+        # Initialize features
+        self._attr_supported_features = 0
 
     @property
     def available(self) -> bool:
