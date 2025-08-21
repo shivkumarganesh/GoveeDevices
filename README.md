@@ -1,163 +1,240 @@
-# Govee Light Automation for Home Assistant
+# Govee Lights for Home Assistant
 
-This is a custom integration for Home Assistant that allows you to control your Govee smart lights using the Govee API.
+Control your Govee smart lights through Home Assistant with real-time updates, color control, and smart API usage management.
 
-## Features
+## 🌟 Features
 
-- Control Govee smart lights from Home Assistant
-- Full RGB color control
-- Brightness control
-- Power on/off functionality
-- Automatic device discovery
-- Real-time state updates
-- **Smart Rate Limiting**: Prevents hitting the 10,000 requests/day API limit
-- **Adaptive Polling**: Automatically adjusts polling intervals based on device count and usage
-- **Rate Limit Monitoring**: Built-in sensors to track API usage and device count
-- **Daily Reset**: Automatic daily reset of request counters
+- ✨ Complete light control (on/off, brightness, color, temperature)
+- 🔄 Real-time state updates
+- 🎨 Full RGB and color temperature support (2000K-9000K)
+- 📊 Built-in API usage monitoring
+- 🔋 Smart power management
+- 🚦 Automatic rate limiting protection
+- 📱 Custom dashboard cards included
 
-## Prerequisites
+## ⚡ Quick Start
 
-1. **Govee API Key**: You need to obtain an API key from Govee's developer portal
-2. **Home Assistant**: This integration requires Home Assistant Core or Home Assistant OS
+1. Get your Govee API Key:
+   - Go to [Govee Developer Portal](https://developer.govee.com)
+   - Create an account or sign in
+   - Click "Create API Key"
+   - Copy your API key
 
-## Getting Your Govee API Key
+2. Install in Home Assistant:
+   ```yaml
+   # Option 1: HACS
+   1. Add this repository to HACS
+   2. Install "Govee Lights" integration
+   3. Restart Home Assistant
 
-1. Go to [Govee Developer Portal](https://developer.govee.com/)
-2. Create an account or sign in
-3. Create a new application
-4. Copy your API key
+   # Option 2: Manual
+   1. Download this repository
+   2. Copy custom_components/govee to your config/custom_components/
+   3. Restart Home Assistant
+   ```
 
-## Installation
+3. Configure:
+   - Go to Settings → Integrations
+   - Click "+ Add Integration"
+   - Search for "Govee"
+   - Enter your API key
 
-### Method 1: Manual Installation (Recommended)
-
-1. Download this repository
-2. Copy the `custom_components/govee_light_automation` folder to your Home Assistant `config/custom_components/` directory
-3. Restart Home Assistant
-4. Go to **Settings** → **Devices & Services** → **Integrations**
-5. Click **+ Add Integration**
-6. Search for "Govee Light Automation"
-7. Enter your API key and follow the setup wizard
-
-### Method 2: HACS Installation
-
-1. Install HACS if you haven't already
-2. Add this repository as a custom repository in HACS
-3. Install the integration through HACS
-4. Follow the setup wizard
-
-## Configuration
-
-### Via UI (Recommended)
-
-1. Go to **Settings** → **Devices & Services** → **Integrations**
-2. Click **+ Add Integration**
-3. Search for "Govee Light Automation"
-4. Enter your Govee API key
-5. The integration will automatically discover your devices
-
-### Via YAML (Alternative)
-
-Add the following to your `configuration.yaml`:
-
-```yaml
-govee_light_automation:
-  api_key: YOUR_GOVEE_API_KEY
-```
-
-## Usage
-
-Once configured, your Govee lights will appear as light entities in Home Assistant. You can:
-
-- Turn lights on/off
-- Adjust brightness
-- Change colors using the color picker
-- Use in automations and scripts
-- Control via voice assistants (Google Assistant, Alexa, etc.)
-
-### Rate Limiting & Monitoring
-
-The integration includes smart rate limiting to prevent hitting the 10,000 requests/day API limit:
-
-- **Automatic Request Counting**: Tracks all API requests made
-- **Adaptive Polling**: Adjusts polling intervals based on device count and usage
-- **Rate Limit Sensors**: Monitor your API usage in real-time:
-  - `Govee API Rate Limit`: Shows usage percentage and remaining requests
-  - `Govee Device Count`: Shows number of active devices
-  - `Govee Polling Interval`: Shows current polling interval in seconds
-  - `Govee API Calls`: **NEW!** Detailed API call tracking with real-time rate limit info from Govee API headers
-
-### Configuration Options
-
-During setup, you can configure:
-
-- **API Key**: Your Govee API key
-- **Enable Rate Limiting**: Toggle rate limiting on/off (default: enabled)
-
-The integration will automatically:
-- Count your daily API requests
-- Adjust polling intervals based on device count
-- Reset counters daily at midnight
-- Prevent requests when approaching the limit
-
-### New API Calls Sensor
-
-The **Govee API Calls** sensor provides detailed information about your API usage:
-
-**Main Value**: Total number of API calls made today
-
-**Attributes**:
-- `total_calls_today`: Number of API calls made today
-- `remaining_calls`: Estimated remaining calls (based on local tracking)
-- `usage_percentage`: Current usage percentage
-- `daily_limit`: Maximum daily limit (10,000)
-- `device_count`: Number of active devices
-- `adaptive_polling_interval`: Current polling interval in seconds
-- `last_reset_date`: Date when counters were last reset
-- `rate_limit_status`: Status (Normal/Warning/Critical)
-- `api_remaining_calls`: Real-time remaining calls from Govee API headers
-- `api_reset_time`: When the rate limit will reset (from API headers)
-- `last_api_call_time`: Timestamp of the last API call
-
-**Dashboard Usage**: Add this sensor to your dashboard to monitor API usage in real-time!
-
-## Supported Devices
-
-This integration supports most Govee smart lights that are compatible with the Govee API, including:
-
-- Govee LED Strip Lights
-- Govee Bulbs
-- Govee Light Bars
-- Other Govee smart lighting products
-
-## Troubleshooting
-
-### No Devices Found
-
-1. Verify your API key is correct
-2. Ensure your Govee devices are connected to the internet
-3. Check that your devices are registered in the Govee app
-
-### Lights Not Responding
-
-1. Check your internet connection
-2. Verify the devices are online in the Govee app
-3. Try restarting Home Assistant
-4. Check the Home Assistant logs for error messages
+## 🚨 Important Notes
 
 ### API Rate Limits
+- Govee limits API calls to 10,000 requests per day
+- This integration includes smart rate limiting to prevent reaching this limit
+- Each device update counts as one API call
+- Default polling interval is 1 minute per device
+- Auto-updates occur when state changes (minimum 2-second delay)
 
-The Govee API has a 10,000 requests per day limit. The integration includes smart rate limiting to prevent hitting this limit:
+### Device Compatibility
+- Works with most Govee smart lights that support the Govee API
+- Devices must be:
+  - Connected to WiFi
+  - Set up in the Govee app
+  - Compatible with Govee's API (check your model in the Govee app)
 
-- **Automatic Protection**: The integration automatically tracks and limits requests
-- **Adaptive Polling**: Polling intervals adjust based on device count and usage
-- **Daily Reset**: Request counters reset automatically at midnight
-- **Monitoring**: Use the built-in sensors to monitor your API usage
+### Known Limitations
+- Color temperature range: 2000K-9000K
+- Minimum update interval: 2 seconds
+- Some older models may not support all features
+- API key is tied to your Govee account
+- API rate limit is shared across all devices
 
-If you experience rate limiting issues:
-- Check the `Govee API Rate Limit` sensor for current usage
-- The integration will automatically reduce polling frequency when approaching limits
-- Consider disabling some devices if you have many lights
+## 📊 Monitoring Tools
+
+### 1. API Usage Sensor
+- Entity ID: `sensor.govee_api_calls`
+- Shows total daily API calls
+- Tracks remaining calls
+- Monitors rate limit status
+
+### 2. Built-in Dashboard Card
+Add to your dashboard:
+```yaml
+type: custom:govee-api-monitor-card
+entity: sensor.govee_api_calls
+```
+
+### 3. Rate Limit States
+- 🟢 NORMAL: Below 80% usage
+- 🟡 WARNING: 80-90% usage
+- 🔴 CRITICAL: Above 90% usage
+
+## 🔧 Advanced Configuration
+
+### Adjusting Update Intervals
+The integration automatically manages polling intervals based on:
+- Number of devices
+- Current API usage
+- Rate limit status
+
+Default intervals:
+- Minimum: 2 seconds between updates
+- Regular polling: 1 minute
+- Adaptive increase when approaching limits
+
+### Recommended Setup for Large Installations
+If you have many devices (10+):
+1. Monitor `sensor.govee_api_calls` initially
+2. Check actual usage patterns
+3. Consider creating automations to adjust polling based on occupancy
+
+## 🚧 Troubleshooting
+
+### Devices Not Showing Up
+1. Verify in Govee app:
+   - Device is online
+   - Device is connected to WiFi
+   - Device supports API control
+
+2. Check Home Assistant logs:
+   ```bash
+   2025-08-21 12:00:00 ERROR (MainThread) [custom_components.govee] 
+   ```
+
+3. Validate API key:
+   - Test in Govee Developer Portal
+   - Ensure key has permissions
+
+### API Rate Limit Issues
+1. Monitor usage with dashboard card
+2. Check logs for rate limit warnings
+3. Consider reducing polling interval
+4. Look for automations causing excessive updates
+
+### Connection Problems
+1. Ensure stable internet connection
+2. Check device WiFi connection
+3. Verify Govee cloud service status
+4. Restart Home Assistant
+
+## 🔄 State Updates
+
+The integration updates device states in three ways:
+1. Regular polling (every minute)
+2. On command (when you control the device)
+3. Auto-updates (when state changes, min 2-second delay)
+
+## 📱 Supported Commands
+
+- 💡 Turn On/Off
+- 🔆 Brightness (0-100%)
+- 🎨 RGB Color
+- 🌡️ Color Temperature (2000K-9000K)
+
+## 🏗️ Examples
+
+### Basic Light Control
+```yaml
+# Turn on light
+service: light.turn_on
+target:
+  entity_id: light.govee_bedroom
+data:
+  brightness_pct: 100
+
+# Set color
+service: light.turn_on
+target:
+  entity_id: light.govee_bedroom
+data:
+  rgb_color: [255, 0, 0]  # Red
+
+# Set color temperature
+service: light.turn_on
+target:
+  entity_id: light.govee_bedroom
+data:
+  color_temp_kelvin: 3000  # Warm white
+```
+
+### Dashboard Examples
+```yaml
+# Simple light card
+type: light
+entity: light.govee_bedroom
+
+# With API monitoring
+type: vertical-stack
+cards:
+  - type: light
+    entity: light.govee_bedroom
+  - type: custom:govee-api-monitor-card
+    entity: sensor.govee_api_calls
+```
+
+## 🆘 Common Issues
+
+1. "Rate limit reached":
+   - Normal protection mechanism
+   - Wait for limit reset (midnight UTC)
+   - Monitor usage with dashboard card
+
+2. "Device not responding":
+   - Check device WiFi connection
+   - Verify device power
+   - Reset device if persistent
+
+3. "API key invalid":
+   - Verify key in Govee Developer Portal
+   - Check for spaces/typos
+   - Generate new key if needed
+
+## 🔒 Security Notes
+
+- Keep your API key secure
+- Don't share your key publicly
+- One key works for all devices
+- Keys can be revoked in Govee portal
+
+## 📚 Additional Resources
+
+- [Govee API Documentation](https://govee-public.s3.amazonaws.com/developer-docs/GoveeDeveloperAPIReference.pdf)
+- [Home Assistant Forums](https://community.home-assistant.io/t/govee-integration)
+- [GitHub Issues](https://github.com/shivkumarganesh/GoveeDevices/issues)
+
+## 🤝 Contributing
+
+1. Fork repository
+2. Create feature branch
+3. Commit changes
+4. Open pull request
+
+## 📄 License
+
+MIT License - See LICENSE file
+
+## 👥 Support
+
+- Open an issue on GitHub
+- Join Discord community
+- Check troubleshooting guide above
+
+## ⭐ Star History
+
+Show your support by starring the repository!
 
 ## Development
 
