@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import datetime
 
 import aiohttp
 from homeassistant.components.light import (
@@ -10,6 +11,7 @@ from homeassistant.components.light import (
     ATTR_RGB_COLOR,
     ColorMode,
     LightEntity,
+    LightEntityFeature,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY
@@ -71,18 +73,30 @@ async def async_setup_entry(
 class GoveeLight(LightEntity):
     """Representation of a Govee Light."""
 
-    def __init__(self, hass, config_entry, device_info):
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, device_info: dict) -> None:
         """Initialize the light."""
         self.hass = hass
-        self._entry_id = config_entry.entry_id  # Add this line
-        self._device_info = device_info
-        self._name = device_info["deviceName"]
+        self._entry_id = config_entry.entry_id
+        self._api_key = config_entry.data[CONF_API_KEY]
+        self._device = device_info
+        self._attr_name = device_info["deviceName"]
+        self._attr_unique_id = device_info["device"]
         self._device_id = device_info["device"]
         self._model = device_info["model"]
         self._state = None
         self._brightness = None
         self._color = None
         self._available = True
+        
+        # Set supported features
+        self._attr_supported_color_modes = {ColorMode.RGB, ColorMode.BRIGHTNESS}
+        self._attr_color_mode = ColorMode.RGB
+        self._attr_supported_features = LightEntityFeature.EFFECT
+
+    @property
+    def available(self) -> bool:
+        """Return if light is available."""
+        return self._available
 
     @property
     def is_on(self) -> bool | None:
@@ -106,8 +120,8 @@ class GoveeLight(LightEntity):
         url = "https://developer-api.govee.com/v1/devices/control"
         
         command = {
-            "device": self._device["device"],
-            "model": self._device["model"],
+            "device": self._device_id,
+            "model": self._model,
             "cmd": {
                 "name": "turn",
                 "value": "on"
@@ -131,9 +145,17 @@ class GoveeLight(LightEntity):
                 }
             }
 
-        async with session.put(url, headers=headers, json=command) as response:
-            response.raise_for_status()
-            self._state = True
+        try:
+            async with session.put(url, headers=headers, json=command) as response:
+                response.raise_for_status()
+                self._state = True
+                if ATTR_BRIGHTNESS in kwargs:
+                    self._brightness = kwargs[ATTR_BRIGHTNESS]
+                if ATTR_RGB_COLOR in kwargs:
+                    self._color = kwargs[ATTR_RGB_COLOR]
+        except Exception as e:
+            _LOGGER.error("Error turning on Govee light %s: %s", self._attr_name, str(e))
+            self._available = False
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the light."""
@@ -142,45 +164,47 @@ class GoveeLight(LightEntity):
         url = "https://developer-api.govee.com/v1/devices/control"
         
         command = {
-            "device": self._device["device"],
-            "model": self._device["model"],
+            "device": self._device_id,
+            "model": self._model,
             "cmd": {
                 "name": "turn",
                 "value": "off"
             }
         }
 
-        async with session.put(url, headers=headers, json=command) as response:
-            response.raise_for_status()
-            self._state = False
+        try:
+            async with session.put(url, headers=headers, json=command) as response:
+                response.raise_for_status()
+                self._state = False
+        except Exception as e:
+            _LOGGER.error("Error turning off Govee light %s: %s", self._attr_name, str(e))
+            self._available = False
 
     async def async_update(self) -> None:
         """Fetch new state data for this light."""
+        session = async_get_clientsession(self.hass)
+        headers = {"Govee-API-Key": self._api_key}
+        url = f"https://developer-api.govee.com/v1/devices/state?device={self._device_id}&model={self._model}"
+
         try:
-            rate_limiter = self.hass.data[DOMAIN][self._entry_id]["rate_limiter"]
-            api = self.hass.data[DOMAIN][self._entry_id]["api"]
-            
-            if not rate_limiter.can_make_request():
-                _LOGGER.warning("Rate limit reached, skipping update for %s", self._name)
-                return
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                data = await response.json()
 
-            response = await self.hass.async_add_executor_job(
-                api.get_device_state,
-                self._device_id,
-                self._model
-            )
-
-            if response and "data" in response:
-                data = response["data"]
-                self._state = data.get("powerState") == "on"
-                self._brightness = int(data.get("brightness", 0) * 255 / 100)
-                color = data.get("color", {})
-                if color:
-                    self._color = (color.get("r", 0), color.get("g", 0), color.get("b", 0))
-                self._available = True
-            else:
-                self._available = False
+                if "data" in data:
+                    properties = data["data"]["properties"]
+                    for prop in properties:
+                        if prop["name"] == "powerState":
+                            self._state = prop["value"] == "on"
+                        elif prop["name"] == "brightness":
+                            self._brightness = int(prop["value"] * 255 / 100)
+                        elif prop["name"] == "color":
+                            color = prop["value"]
+                            self._color = (color["r"], color["g"], color["b"])
+                    self._available = True
+                else:
+                    self._available = False
 
         except Exception as e:
-            _LOGGER.error("Error updating Govee light %s: %s", self._name, str(e))
+            _LOGGER.error("Error updating Govee light %s: %s", self._attr_name, str(e))
             self._available = False
